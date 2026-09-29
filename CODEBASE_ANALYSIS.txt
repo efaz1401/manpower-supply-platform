@@ -1,0 +1,218 @@
+================================================================================
+ CODEBASE ANALYSIS — ASMC Manpower Platform
+ Location : C:\Users\MSI\manpower-platform
+ Analyzed : 2026-07-24
+================================================================================
+
+--------------------------------------------------------------------------------
+ 1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+This is a Laravel 12 web application for a Saudi Arabian (KSA) manpower /
+staffing / labor-supply company (branded "ASMC Manpower"). It manages the full
+lifecycle of supplying foreign workers to client companies: recruitment,
+onboarding, deployment under Ajeer permits, attendance/timesheets, WPS payroll,
+VAT/ZATCA-ready invoicing, document-expiry compliance, and role-specific
+portals for staff, clients, and workers.
+
+The project is at an early "skeleton + data model" stage: the database schema,
+models, roles/permissions, dashboards, portals, localization, and demo data are
+fully built, but most back-office CRUD modules are still route placeholders
+awaiting later build phases.
+
+--------------------------------------------------------------------------------
+ 2. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+Backend framework : Laravel 12 (PHP ^8.2)
+Frontend          : Blade + Livewire 3.6 + Livewire Volt 1.7
+Build tooling     : Vite 7, Tailwind CSS 3.1 (+ @tailwindcss/forms, @tailwindcss/vite), PostCSS, Autoprefixer, Axios
+Auth scaffolding  : Laravel Breeze 2.4 (Livewire stack)
+Key packages:
+  - spatie/laravel-permission 8.3   → roles & permissions (RBAC)
+  - spatie/laravel-activitylog 5.0  → audit trail (used on Worker, likely others)
+  - mcamara/laravel-localization 2.4→ locale-aware routing/support
+  - laravel/tinker, pail, pint, sail; phpunit 11.5; mockery; faker; collision
+Database          : MySQL (DB_CONNECTION=mysql, db "manpower" on 127.0.0.1:3306, root)
+Queue / Cache / Session : database driver
+Mail              : log driver (dev)
+Environment       : APP_ENV=local, APP_DEBUG=true
+
+--------------------------------------------------------------------------------
+ 3. LOCALIZATION & REGIONAL FOCUS (KSA-SPECIFIC)
+--------------------------------------------------------------------------------
+- Bilingual Arabic/English throughout; ARABIC IS THE DEFAULT locale
+  (APP_LOCALE=ar, fallback en). Nearly every model has *_en and *_ar fields.
+- SetLocale middleware resolves locale from session → authenticated user's
+  preference → app default; persists choice to session. Registered globally on web.
+- LocaleController + `locale/{locale}` route provide a public locale switcher.
+- app/Support/DateFormatter.php provides Blade directives @greg, @hijri,
+  @dateboth, @money. Hijri dates use the intl Umm al-Qura calendar (KSA official).
+  Currency formats as SAR (ر.س in Arabic).
+- Domain is heavily KSA-regulatory: Iqama numbers, Qiwa contract salary,
+  Ajeer permits, WPS (Wage Protection System) 10-day payroll deadline,
+  ZATCA e-invoicing fields (QR payload, seller/buyer VAT), 15% KSA VAT,
+  Commercial Registration (CR) and MOL/Qiwa establishment IDs.
+
+--------------------------------------------------------------------------------
+ 4. DOMAIN DATA MODEL (13 migrations, ~20 tables)
+--------------------------------------------------------------------------------
+Framework tables : users, cache, jobs; activity_log; spatie permission tables.
+
+CLIENTS & CONTRACTS (150001):
+  - clients            : company profile, CR/establishment/VAT numbers, payment terms, status
+  - supply_contracts   : master supply agreements per client (professions scope, headcount quota, auto-renew)
+  - rate_cards         : billing rate per profession per client (monthly/hourly/overtime, SAR)
+
+WORKERS & DOCUMENTS (150002):
+  - workers            : employee profile (bilingual name, nationality, profession, skills[],
+                         iqama/passport, sponsorship_status, availability lifecycle,
+                         WPS bank/IBAN, Qiwa vs basic salary, accommodation, emergency contact)
+  - documents          : POLYMORPHIC vault (documentable morph) for iqama/passport/permits/
+                         medical/insurance/license/contract; issue/expiry dates; denormalized
+                         status {valid, expiring, expired, missing} maintained by a compliance engine
+
+DEPLOYMENT (150003):
+  - ajeer_permits      : gate deployment (worker+client+profession, max 3 yrs); status lifecycle
+  - deployments        : worker↔client placements; links contract + permit; billing rate/cycle;
+                         status: pending → permit_issued → active → ended
+
+ATTENDANCE (150004):
+  - shifts             : roster/shift templates per client site (weekdays JSON, times)
+  - timesheets         : daily attendance; clock in/out, hours + overtime; geolocation lat/lng +
+                         selfie at clock-in; approval chain worker → client → ops
+                         (status: draft → submitted → client_approved → verified/rejected)
+
+PAYROLL (150005):
+  - payroll_runs       : monthly period; WPS deadline; status draft→calculated→approved→disbursed→closed;
+                         unique per (year,month)
+  - payroll_lines      : per-worker pay; basic/allowances/overtime/deductions/net; Qiwa salary +
+                         salary_mismatch flag; payment method/IBAN; payslip path
+
+BILLING (150006):
+  - invoices           : ZATCA-ready (QR payload, seller/buyer VAT); 15% VAT; amount_paid;
+                         status draft→issued→partially_paid→paid→overdue→cancelled
+  - invoice_lines      : line items linked to worker/deployment
+
+RECRUITMENT (150007):
+  - recruitment_candidates : pipeline stages sourced→offered→visa→contract→medical→travel→
+                             arrived→onboarded→rejected; converts to a worker
+  - onboarding_cases   : per-candidate checklist (JSON), target date, status
+
+COMPLIANCE (150008):
+  - alert_rules        : configurable expiry thresholds per document type (e.g. [90,60,30,14,7,0])
+  - alert_events       : polymorphic alert instances (severity info/warning/critical, bilingual titles)
+  - notifications      : Laravel database notifications (in-app centre)
+
+Eloquent conventions: SoftDeletes on core entities; LogsActivity (Worker logs
+fillable, only-dirty, no empty logs); polymorphic Document via morphMany;
+Worker->currentDeployment() uses latestOfMany() scoped to active.
+
+--------------------------------------------------------------------------------
+ 5. AUTHENTICATION, ROLES & AUTHORIZATION
+--------------------------------------------------------------------------------
+Roles (RolePermissionSeeder): admin, manager, ops, client, worker.
+Permissions are granular and grouped by module (view/manage workers, clients,
+contracts, deployments, timesheets, payroll, invoices, recruitment, compliance,
+users, activity log, reports, dashboards).
+
+Role → permission map:
+  - admin   : all permissions
+  - manager : executive+ops dashboards, view workers/clients, manage contracts/
+              deployments/payroll/invoices, approve timesheets, view compliance/reports/activity
+  - ops     : operations dashboard, full worker/client/contract/deployment/timesheet/
+              payroll/invoice/recruitment management
+  - client  : view invoices, approve timesheets (portal)
+  - worker  : none (self-service portal only)
+
+User model: HasRoles, SoftDeletes, Notifiable; belongsTo Client and Worker
+(portal linkage via client_id / worker_id); displayName() and homeRoute()
+are locale/role aware. Route middleware uses Spatie 'role:' aliases registered
+in bootstrap/app.php.
+
+--------------------------------------------------------------------------------
+ 6. ROUTING & UI STRUCTURE
+--------------------------------------------------------------------------------
+routes/web.php:
+  - `/` welcome page; public locale switch route.
+  - `dashboard` → DashboardController@redirect sends each user to homeRoute().
+  - role:admin|manager      → executive dashboard (KPIs)
+  - role:admin|manager|ops  → operations dashboard + 9 MODULE PLACEHOLDERS
+    (workers, clients, contracts, deployments, timesheets, payroll, invoices,
+     recruitment, compliance) — all render modules.placeholder view (NOT YET BUILT)
+  - role:admin              → admin/users, admin/activity (also placeholders)
+  - role:client  prefix /portal → dashboard, workers, timesheets, invoices
+  - role:worker  prefix /me     → dashboard, documents, payslips
+routes/auth.php : Breeze auth routes.  routes/console.php : console commands.
+
+Controllers implemented: DashboardController (executive & operations KPIs),
+ClientPortalController and WorkerPortalController (scoped, read-only queries),
+LocaleController, VerifyEmailController.
+
+Views: layouts (app/guest + sidebar/topbar partials), dashboards (executive,
+operations), client & worker portal pages, Breeze auth/profile Livewire pages,
+reusable Blade components (stat-card, buttons, modal, inputs, nav), and a
+`modules.placeholder` used by all unbuilt back-office modules.
+
+--------------------------------------------------------------------------------
+ 7. DASHBOARDS & PORTAL LOGIC
+--------------------------------------------------------------------------------
+Executive dashboard: workforce totals, availability breakdown, UTILIZATION %
+(deployed/total), active clients, active deployments, expiring/expired docs,
+outstanding invoice total.
+Operations dashboard: available workers, pending deployments, pending timesheets,
+expiring & expired docs, plus a top-10 list of soonest-expiring documents.
+Client portal: active deployments, pending timesheets, outstanding balance,
+deployed-worker roster, recent timesheets, invoices — all scoped to the user's
+client_id. Worker portal: current deployment, documents (by expiry), payslips.
+
+--------------------------------------------------------------------------------
+ 8. DEMO / SEED DATA
+--------------------------------------------------------------------------------
+DemoSeeder builds a realistic dataset: 3 staff users (admin/manager/ops @asmc.com.sa),
+3 clients with supply contracts + rate cards, 12 workers across professions and
+availability states, iqama/passport documents with a spread of expiry statuses,
+Ajeer permits + active deployments, 1 client + 1 worker portal user, 5 days of
+timesheets each, one payroll run (with intentional Qiwa salary mismatches),
+VAT invoices per client, a recruitment pipeline, and default alert rules.
+Default password for all demo users: "password".
+RolePermissionSeeder seeds the RBAC. (DatabaseSeeder orchestrates.)
+
+--------------------------------------------------------------------------------
+ 9. OBSERVATIONS, GAPS & RISKS
+--------------------------------------------------------------------------------
+Maturity / gaps:
+  - 9 back-office modules + 2 admin pages are route-level PLACEHOLDERS only
+    (no CRUD, Livewire components, or forms yet). This is the main remaining work.
+  - No compliance/alert SCAN command yet: alert_events & document.status are
+    designed to be maintained by a "compliance engine" that is not implemented;
+    routes/console.php should eventually schedule expiry scans + WPS-deadline checks.
+  - Models beyond Worker were not all inspected for relationships/casts, but the
+    schema implies them (Invoice->lines, PayrollRun->lines, etc. referenced in seeder).
+  - No feature tests inspected for the new domain; tests/ dir is Breeze default.
+
+Security / config notes (dev-stage, expected but worth tracking before prod):
+  - APP_DEBUG=true and APP_ENV=local in committed .env; .env is present in the
+    working tree (ensure it stays gitignored — .gitignore exists).
+  - DB uses root with (blank/local) credentials; MAIL is log driver.
+  - Timesheets store geolocation + selfie of workers — PII/privacy handling and
+    file-storage security will matter at build time.
+  - ZATCA QR payload / VAT fields exist but invoice PDF + QR generation not yet implemented.
+
+Strengths:
+  - Clean, well-normalized, KSA-domain-accurate schema with thoughtful lifecycle
+    enums and denormalized status fields for performance.
+  - Strong separation of concerns: RBAC via Spatie, audit via activitylog,
+    bilingual + Hijri-aware formatting centralized in DateFormatter.
+  - Sensible indexing on foreign keys, statuses, expiry dates, and lookups.
+  - Realistic seed data makes the app immediately demoable.
+
+--------------------------------------------------------------------------------
+ 10. HOW TO RUN (from composer.json scripts)
+--------------------------------------------------------------------------------
+  composer setup   → install, copy .env, key:generate, migrate, npm install, build
+  composer dev     → concurrently runs: php artisan serve, queue:listen, pail (logs), vite
+  composer test    → config:clear + artisan test
+  (Then seed with: php artisan db:seed  — runs RolePermission + Demo seeders.)
+
+================================================================================
+ END OF ANALYSIS
+================================================================================

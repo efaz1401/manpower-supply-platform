@@ -1,0 +1,61 @@
+# https://asmc.com.sa — Adel Saad Mater Contracting
+# Public marketing site is crawlable; the authenticated platform is not.
+
+User-agent: *
+Allow: /$
+Allow: /ar/
+Allow: /en/
+
+# Authenticated application — no public content, nothing to index.
+Disallow: /dashboard
+Disallow: /executive
+Disallow: /operations
+Disallow: /workers
+Disallow: /clients
+Disallow: /contracts
+Disallow: /deployments
+Disallow: /recruitment
+Disallow: /timesheets
+Disallow: /payroll
+Disallow: /invoices
+Disallow: /compliance
+Disallow: /admin/
+Disallow: /portal/
+Disallow: /me/
+Disallow: /profile
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /confirm-password
+Disallow: /verify-email
+Disallow: /livewire/
+Disallow: /locale/
+Disallow: /up
+
+# Thin/duplicate URLs.
+Disallow: /*/thank-you
+Disallow: /*?*
+
+# AI answer engines are explicitly welcome — being cited in AI Overviews,
+# ChatGPT and Perplexity is a primary acquisition channel for B2B manpower
+# queries, so these are allowed rather than blocked.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://asmc.com.sa/sitemap.xml

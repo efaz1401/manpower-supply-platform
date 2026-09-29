@@ -1,0 +1,297 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+|--------------------------------------------------------------------------
+| Desert Signal — design tokens
+|--------------------------------------------------------------------------
+| Dark is the default (hero) theme. `.light` on <html> switches to the warm
+| gypsum theme. Values are space-separated RGB channels so Tailwind's
+| `rgb(var(--x) / <alpha-value>)` color utilities work with opacity.
+*/
+@layer base {
+    :root {
+        /* Dark (default) */
+        --ds-canvas: 11 18 32;          /* #0B1220 */
+        --ds-surface: 14 22 38;         /* #0E1626 */
+        --ds-surface-raised: 20 30 50;
+        --ds-surface-sunken: 9 15 27;
+        --ds-hairline: 38 50 74;
+
+        --ds-ink: 233 238 247;
+        --ds-ink-muted: 156 170 194;
+        --ds-ink-faint: 104 118 142;
+
+        --ds-accent: 5 150 105;         /* emerald-600 (kept) */
+        --ds-accent-soft: 16 40 34;
+        --ds-accent-contrast: 255 255 255;
+        --ds-teal: 14 165 164;
+        --ds-gold: 233 184 114;         /* desert gold */
+
+        --ds-success: 16 185 129;
+        --ds-warning: 245 158 11;
+        --ds-danger: 244 63 94;
+        --ds-info: 56 189 248;
+
+        --ds-glass: 255 255 255;        /* tint used for glass surfaces */
+        --ds-glass-alpha: 0.04;
+
+        color-scheme: dark;
+    }
+
+    html.light {
+        --ds-canvas: 251 250 247;       /* gypsum #FBFAF7 */
+        --ds-surface: 255 255 255;
+        --ds-surface-raised: 255 255 255;
+        --ds-surface-sunken: 244 243 239;
+        --ds-hairline: 226 224 216;
+
+        --ds-ink: 24 32 46;
+        --ds-ink-muted: 90 100 118;
+        --ds-ink-faint: 140 150 168;
+
+        --ds-accent-soft: 220 244 234;
+        --ds-glass: 12 18 32;
+        --ds-glass-alpha: 0.02;
+
+        color-scheme: light;
+    }
+
+    html {
+        background-color: rgb(var(--ds-canvas));
+    }
+
+    body {
+        background-color: rgb(var(--ds-canvas));
+        color: rgb(var(--ds-ink));
+    }
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Reusable component utilities
+|--------------------------------------------------------------------------
+*/
+@layer components {
+    /* Frosted glass surface */
+    .glass {
+        background-color: rgb(var(--ds-surface) / 0.72);
+        border: 1px solid rgb(var(--ds-hairline) / 0.6);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.04) inset,
+            0 8px 30px -12px rgb(0 0 0 / 0.5);
+    }
+
+    .glass-panel {
+        @apply glass rounded-2xl;
+    }
+
+    /* Aurora mesh background (drifts slowly; paused under reduced-motion) */
+    .aurora {
+        position: absolute;
+        inset: -20%;
+        z-index: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(40% 40% at 20% 30%, rgb(var(--ds-accent) / 0.28), transparent 70%),
+            radial-gradient(35% 35% at 80% 20%, rgb(var(--ds-teal) / 0.22), transparent 70%),
+            radial-gradient(45% 45% at 60% 80%, rgb(var(--ds-gold) / 0.16), transparent 70%);
+        filter: blur(40px);
+        animation: aurora-drift 18s ease-in-out infinite;
+    }
+
+    /* Abstract mashrabiya lattice — subtle cultural motif */
+    .mashrabiya {
+        background-image:
+            repeating-linear-gradient(45deg, rgb(var(--ds-ink) / 0.03) 0 1px, transparent 1px 14px),
+            repeating-linear-gradient(-45deg, rgb(var(--ds-ink) / 0.03) 0 1px, transparent 1px 14px);
+    }
+
+    /* Skeleton shimmer for loading rows */
+    .skeleton {
+        position: relative;
+        overflow: hidden;
+        background-color: rgb(var(--ds-hairline) / 0.4);
+    }
+    .skeleton::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(90deg, transparent, rgb(var(--ds-glass) / 0.08), transparent);
+        animation: shimmer 1.5s infinite;
+    }
+
+    /*
+    | Compliance radar — rotating conic sweep behind the SVG scope.
+    | The gradient fades from accent to transparent so it reads as a beam.
+    */
+    .ds-radar-sweep {
+        background: conic-gradient(
+            from 0deg,
+            rgb(var(--ds-accent) / 0.28) 0deg,
+            rgb(var(--ds-accent) / 0.10) 26deg,
+            transparent 60deg,
+            transparent 360deg
+        );
+        mask-image: radial-gradient(circle, #000 0 68%, transparent 70%);
+        -webkit-mask-image: radial-gradient(circle, #000 0 68%, transparent 70%);
+        animation: radar-sweep 4s linear infinite;
+    }
+
+    /* Critical blips breathe so they read as live contacts. */
+    .ds-blip-pulse {
+        transform-origin: center;
+        transform-box: fill-box;
+        animation: fade-in 1.6s ease-in-out infinite alternate;
+    }
+
+    /* Film grain overlay for hero surfaces */
+    .grain::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        opacity: 0.04;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Landing polish — ported from modern React hero patterns, token-based
+    |--------------------------------------------------------------------------
+    */
+
+    /* Headline that fades from solid ink to translucent. Works in dark+light
+       because it reads the ink token, not a hardcoded white. */
+    .text-gradient {
+        background: linear-gradient(
+            to bottom,
+            rgb(var(--ds-ink)) 0%,
+            rgb(var(--ds-ink)) 55%,
+            rgb(var(--ds-ink) / 0.55) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+    }
+
+    /* Primary call-to-action with a soft top-light gradient + lift on hover.
+       Reads the accent tokens so it stays on-brand in both themes. */
+    .btn-gradient {
+        position: relative;
+        background-image: linear-gradient(
+            to bottom,
+            rgb(var(--ds-accent) / 1),
+            rgb(var(--ds-accent) / 0.92)
+        );
+        box-shadow:
+            0 1px 0 0 rgb(255 255 255 / 0.18) inset,
+            0 0 0 1px rgb(var(--ds-accent) / 0.35),
+            0 12px 34px -10px rgb(var(--ds-accent) / 0.55);
+        transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+    }
+    .btn-gradient:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.06);
+        box-shadow:
+            0 1px 0 0 rgb(255 255 255 / 0.22) inset,
+            0 0 0 1px rgb(var(--ds-accent) / 0.5),
+            0 18px 44px -10px rgb(var(--ds-accent) / 0.65);
+    }
+    .btn-gradient:active {
+        transform: translateY(0) scale(0.98);
+    }
+
+    /* Ghost/outline secondary action for pairing next to .btn-gradient. */
+    .btn-ghost {
+        border: 1px solid rgb(var(--ds-hairline));
+        color: rgb(var(--ds-ink));
+        transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+    }
+    .btn-ghost:hover {
+        border-color: rgb(var(--ds-accent) / 0.6);
+        color: rgb(var(--ds-accent));
+        background-color: rgb(var(--ds-accent-soft) / 0.4);
+        transform: translateY(-1px);
+    }
+
+    /* Sticky glass navigation bar (stronger blur than .glass, no rounded). */
+    .glass-nav {
+        background-color: rgb(var(--ds-canvas) / 0.82);
+        backdrop-filter: blur(16px) saturate(1.4);
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        border-bottom: 1px solid rgb(var(--ds-hairline) / 0.7);
+    }
+
+    /* Soft radial glow that sits behind a hero product shot. */
+    .hero-glow {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(50% 60% at 50% 30%, rgb(var(--ds-accent) / 0.25), transparent 70%),
+            radial-gradient(40% 50% at 60% 60%, rgb(var(--ds-teal) / 0.18), transparent 70%);
+        filter: blur(50px);
+    }
+
+    /* Framed product screenshot used in the hero. */
+    .hero-shot {
+        border: 1px solid rgb(var(--ds-hairline));
+        border-radius: 1rem;
+        background-color: rgb(var(--ds-surface) / 0.6);
+        backdrop-filter: blur(8px);
+        box-shadow:
+            0 1px 0 0 rgb(255 255 255 / 0.06) inset,
+            0 30px 80px -20px rgb(0 0 0 / 0.6),
+            0 0 60px -12px rgb(var(--ds-accent) / 0.35);
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Motion — reveal defaults + reduced-motion kill switch
+|--------------------------------------------------------------------------
+*/
+@layer utilities {
+    /*
+    | x-reveal is progressive enhancement: content is VISIBLE by default so the
+    | page never renders blank if JS/Alpine fails to boot. Only once Alpine has
+    | booted and added `html.motion-ready` do we hide elements to animate them in.
+    */
+    html.motion-ready [x-reveal]:not(.is-revealed) {
+        opacity: 0;
+    }
+    .is-revealed {
+        animation: fade-in-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+    .aurora,
+    .skeleton::after,
+    .ds-radar-sweep,
+    .ds-blip-pulse {
+        animation: none !important;
+    }
+    html.motion-ready [x-reveal]:not(.is-revealed) {
+        opacity: 1 !important;
+    }
+}
